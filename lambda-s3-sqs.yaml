@@ -1,0 +1,105 @@
+Parameters:
+  S3BucketParam:
+    Description: Name of the bucket where the source Lambda file is
+    Type: String
+  S3KeyParam:
+    Description: Name of the source Lambda file
+    Type: String
+  S3ObjectVersionParam:
+    Description: Version of the source Lambda file
+    Type: String
+  BucketCustomName:
+    Description: Enter the name for the bucket which will store the files
+    Type: String
+  QueueCustomName:
+    Description: Enter the name for the transmit queue
+    Type: String
+
+Resources:
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        - PolicyName: allowLambdaLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:*
+              Resource: arn:aws:logs:*:*:*
+        - PolicyName: allowSqs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              Resource: !GetAtt TransmitQueue.Arn
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref S3BucketParam
+        S3Key: !Ref S3KeyParam
+        S3ObjectVersion: !Ref S3ObjectVersionParam
+      Handler: lambda_function.main
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.9
+      Timeout: 10
+
+  LambdaFunctionEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 10
+      Enabled: true
+      EventSourceArn: !GetAtt TransmitQueue.Arn
+      FunctionName: !GetAtt LambdaFunction.Arn
+
+  TransmitQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: !Ref QueueCustomName
+        DelaySeconds: 0
+        VisibilityTimeout: 120
+
+  SQSQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: "*"
+              Action: SQS:SendMessage
+              Resource: "*"
+              Condition:
+                ArnLike:
+                  aws:SourceArn: !Sub "arn:aws:s3:::${BucketCustomName}"
+        Queues: 
+          - !Ref TransmitQueue
+    
+  S3Bucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Ref BucketCustomName
+        NotificationConfiguration:
+          QueueConfigurations:
+            - Event: s3:ObjectCreated:Put
+              Queue: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${QueueCustomName}"
+      DependsOn : SQSQueuePolicy
