@@ -2,18 +2,22 @@ Parameters:
   S3BucketParam:
     Description: Name of the bucket where the source Lambda file is
     Type: String
+    Default: mi-github
   S3KeyParam:
     Description: Name of the source Lambda file
     Type: String
+    Default: mi-lambda
   S3ObjectVersionParam:
     Description: Version of the source Lambda file
     Type: String
   BucketCustomName:
     Description: Enter the name for the bucket which will store the files
     Type: String
+    Default: mi-bucket-github
   QueueCustomName:
     Description: Enter the name for the transmit queue
     Type: String
+    Default: mi-bucket-github-sqs
 
 Resources:
 
